@@ -1,7 +1,7 @@
 import type { NormalizedLandmark } from '@mediapipe/tasks-vision'
 
 export type Pose = NormalizedLandmark[]
-export type Sample = { time: number; pose: Pose | null }
+export type Sample = { time: number; pose: Pose | null; poseCount?: number }
 export type Part = 'Қол' | 'Дене' | 'Аяқ'
 export type Comparison = { poseScore: number; timingScore: number; parts: Record<Part, number>; cue: string; highlight: number[]; matchedTime: number }
 
@@ -10,7 +10,8 @@ const required = Object.values(I)
 const connections = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28]]
 const clamp = (v: number, a = 0, b = 1) => Math.max(a, Math.min(b, v))
 
-export function poseIssue(pose: Pose | null): string | null {
+export function poseIssue(pose: Pose | null, poseCount = pose ? 1 : 0): string | null {
+  if (poseCount > 1) return 'Кадрда бірнеше адам бар. Бір адам ғана көрінетін үзіндіні таңдаңыз.'
   if (!pose) return 'Адам анықталмады. Камераға толық денеңізбен көрініңіз.'
   if (required.some(i => !pose[i] || (pose[i].visibility ?? 0) < .55)) return 'Дене нүктелері сенімді анықталмады. Жарықты арттырып, кадрға толық кіріңіз.'
   if ([I.LW,I.RW,I.LA,I.RA].some(i => pose[i].x < .025 || pose[i].x > .975 || pose[i].y < .025 || pose[i].y > .975)) return 'Қол не аяқ кадрдан шығып тұр. Камерадан сәл алыстаңыз.'
@@ -55,7 +56,7 @@ function scorePair(reference: Pose, current: Pose, refAspect: number, camAspect:
 export function compare(reference: Sample[], current: Pose, time: number, offset: number, refAspect: number, camAspect: number, mirrored = false): Comparison | null {
   if (poseIssue(current)) return null
   const target=time+offset
-  const candidates=reference.filter(s=>s.pose && Math.abs(s.time-target)<=.75)
+  const candidates=reference.filter(s=>s.pose && !poseIssue(s.pose,s.poseCount) && Math.abs(s.time-target)<=.75)
   if (!candidates.length) return null
   const evaluated=candidates.map(s=>({s, ...scorePair(s.pose!,current,refAspect,camAspect)}))
   const best=evaluated.sort((x,y)=>y.score-x.score)[0]

@@ -4,11 +4,11 @@ import { analyzeVideo, createDetector, type Detector } from './poseEngine'
 import { compare, drawPose, nearestSample, poseIssue, type Comparison, type Pose, type Sample } from './pose'
 import { clearHistory, getHistory, saveSummary, summarize, type FrameResult, type Summary } from './results'
 import { videoFileIssue } from './video'
+import { moveEnd, moveStart } from './clip'
 import './style.css'
 
 type Phase='empty'|'loaded'|'analyzing'|'ready'|'countdown'|'practicing'|'paused'|'finished'|'insufficient'|'error'
 const fmt=(s:number)=>`${Math.floor(Math.max(0,s)/60).toString().padStart(2,'0')}:${Math.floor(Math.max(0,s)%60).toString().padStart(2,'0')}`
-const cap=(v:number,a:number,b:number)=>Math.min(b,Math.max(a,v))
 
 export default function App(){
   const [tab,setTab]=useState<'studio'|'history'>('studio')
@@ -36,6 +36,7 @@ export default function App(){
   const [summary,setSummary]=useState<Summary|null>(null)
   const [history,setHistory]=useState<Summary[]>(getHistory)
   const [validSamples,setValidSamples]=useState(0)
+  const [sourceReady,setSourceReady]=useState(false)
   const videoRef=useRef<HTMLVideoElement>(null)
   const cameraRef=useRef<HTMLVideoElement>(null)
   const videoCanvasRef=useRef<HTMLCanvasElement>(null)
@@ -62,7 +63,7 @@ export default function App(){
   const reset=useCallback(()=>{
     sessionRef.current++;abortRef.current?.abort();abortRef.current=null
     videoRef.current?.pause();stopCamera()
-    samplesRef.current=[];framesRef.current=[];setLive(null);setSummary(null);setValidSamples(0);setProgress(0);setModelStatus('Модель жүктелмеген')
+    samplesRef.current=[];framesRef.current=[];setLive(null);setSummary(null);setValidSamples(0);setSourceReady(false);setProgress(0);setModelStatus('Модель жүктелмеген')
     setPlayhead(0);setPlaying(false);setCountdown(0);setError('');setOffset(0)
     drawPose(videoCanvasRef.current,null,mirror)
   },[stopCamera,mirror])
@@ -76,7 +77,8 @@ export default function App(){
   },[tab])
   const drawReference=useCallback((time:number)=>{
     const el=videoRef.current
-    drawPose(videoCanvasRef.current,nearestSample(samplesRef.current,time)?.pose??null,mirror,[],el?.videoWidth,el?.videoHeight)
+    const sample=nearestSample(samplesRef.current,time)
+    drawPose(videoCanvasRef.current,sample&&!poseIssue(sample.pose,sample.poseCount)?sample.pose:null,mirror,[],el?.videoWidth,el?.videoHeight)
   },[mirror])
   useEffect(()=>{drawReference(videoRef.current?.currentTime??0);drawPose(cameraCanvasRef.current,lastCameraPoseRef.current,mirror,live?.highlight,cameraRef.current?.videoWidth,cameraRef.current?.videoHeight)},[mirror,live,drawReference])
 
@@ -100,14 +102,16 @@ export default function App(){
     if(!url||!duration)return
     abortRef.current?.abort();const ctrl=new AbortController();abortRef.current=ctrl
     const id=++sessionRef.current
-    setPhase('analyzing');setProgress(0);setError('');setModelStatus('Модель жүктелуде…');setLive(null);setSummary(null)
+    setPhase('analyzing');setProgress(0);setError('');setModelStatus('Модель жүктелуде…');setLive(null);setSummary(null);setSourceReady(false)
     try{
       const samples=await analyzeVideo(url,start,end,ctrl.signal,n=>{if(n>0)setModelStatus('Видео талданып жатыр');setProgress(n)})
       if(id!==sessionRef.current)return
       samplesRef.current=samples
-      const good=samples.filter(s=>!poseIssue(s.pose)).length;setValidSamples(good)
+      const good=samples.filter(s=>!poseIssue(s.pose,s.poseCount)).length;setValidSamples(good)
+      const multiple=samples.filter(s=>(s.poseCount??0)>1).length
+      if(multiple>samples.length*.1){setPhase('insufficient');setModelStatus('Бірнеше адам анықталды');setError('Үлгі видеода бірнеше биші бар. Бір адам толық көрінетін видео немесе үзінді таңдаңыз.');return}
       if(good<Math.max(3,Math.ceil(samples.length*.25))){setPhase('insufficient');setModelStatus('Дерек жеткіліксіз');setError('Үлгі видеода адам толық әрі анық көрінбейді. Басқа үзінді немесе видео таңдаңыз.');return}
-      setModelStatus('Модель дайын');setPhase('ready');drawReference(videoRef.current?.currentTime??start)
+      setModelStatus('Модель дайын');setSourceReady(true);setPhase('ready');drawReference(videoRef.current?.currentTime??start)
     }catch(e){if((e as Error).name==='AbortError')return;setPhase('error');setModelStatus('Модель қатесі');setError('Қимылды тану моделі жүктелмеді немесе видео талданбады. Интернетті тексеріп, қайта көріңіз.')}
   }
   async function startCamera(){
@@ -129,7 +133,7 @@ export default function App(){
     }
   }
   async function begin(){
-    if(!cameraOn||!samplesRef.current.length||!videoRef.current)return
+    if(!cameraOn||!sourceReady||!samplesRef.current.length||!videoRef.current)return
     const id=++sessionRef.current
     setLive(null);setSummary(null);framesRef.current=[];finishingRef.current=false;setPhase('countdown')
     videoRef.current.pause();videoRef.current.currentTime=start
@@ -153,7 +157,7 @@ export default function App(){
   }
   function changeSegment(nextStart:number,nextEnd:number){
     abortRef.current?.abort();sessionRef.current++
-    samplesRef.current=[];framesRef.current=[];setValidSamples(0);setSummary(null);setLive(null)
+    samplesRef.current=[];framesRef.current=[];setValidSamples(0);setSourceReady(false);setSummary(null);setLive(null)
     setStart(nextStart);setEnd(nextEnd);setPhase('loaded');setProgress(0)
     drawPose(videoCanvasRef.current,null,mirror)
   }
@@ -178,15 +182,16 @@ export default function App(){
       if(now-last>=125&&cam&&vid&&detector&&cam.readyState>=2&&vid.readyState>=2){
         last=now
         try{
-          const pose=detector.detect(cam,now);lastCameraPoseRef.current=pose
-          const issue=poseIssue(pose);setCameraIssue(issue||'')
+          const observation=detector.detect(cam,now)
+          const pose=observation.pose;lastCameraPoseRef.current=pose
+          const issue=poseIssue(pose,observation.poseCount);setCameraIssue(issue||'')
           const result=!issue&&pose?compare(samplesRef.current,pose,vid.currentTime,offset,vid.videoWidth/vid.videoHeight,cam.videoWidth/cam.videoHeight,mirror):null
           framesRef.current.push({time:vid.currentTime,comparison:result})
           if(result){
             if(now-cueAtRef.current>1800||!cueRef.current){cueRef.current=result.cue;cueAtRef.current=now}
             setLive({...result,cue:cueRef.current})
           }else setLive(null)
-          drawPose(cameraCanvasRef.current,pose,mirror,result?.highlight||[],cam.videoWidth,cam.videoHeight)
+          drawPose(cameraCanvasRef.current,issue?null:pose,mirror,result?.highlight||[],cam.videoWidth,cam.videoHeight)
           drawReference(vid.currentTime)
         }catch{setCameraIssue('Камера кадры талданбады. Жаттығуды қайта бастаңыз.');pause();return}
       }
@@ -202,14 +207,14 @@ export default function App(){
       const cam=cameraRef.current,detector=detectorRef.current
       if(now-last>=180&&cam&&detector&&cam.readyState>=2){
         last=now
-        try{const pose=detector.detect(cam,now);lastCameraPoseRef.current=pose;setCameraIssue(poseIssue(pose)||'');drawPose(cameraCanvasRef.current,pose,mirror,[],cam.videoWidth,cam.videoHeight)}catch{setCameraIssue('Камера кадры талданбады. Камераны қайта қосыңыз.');return}
+        try{const observation=detector.detect(cam,now);const pose=observation.pose;const issue=poseIssue(pose,observation.poseCount);lastCameraPoseRef.current=pose;setCameraIssue(issue||'');drawPose(cameraCanvasRef.current,issue?null:pose,mirror,[],cam.videoWidth,cam.videoHeight)}catch{setCameraIssue('Камера кадры талданбады. Камераны қайта қосыңыз.');return}
       }
       raf=requestAnimationFrame(tick)
     }
     raf=requestAnimationFrame(tick)
     return()=>cancelAnimationFrame(raf)
   },[cameraOn,phase,mirror])
-  const canPractice=['ready','paused','finished','insufficient'].includes(phase)&&validSamples>0
+  const canPractice=sourceReady&&['ready','paused','finished','insufficient'].includes(phase)&&validSamples>0
   const statusLabel=phase==='analyzing'?`Талдануда · ${progress}%`:phase==='practicing'?'Жаттығу жүріп жатыр':phase==='countdown'?'Дайындалу':phase==='ready'?'Жаттығуға дайын':phase==='finished'?'Сабақ аяқталды':phase==='insufficient'?'Дерек жеткіліксіз':phase==='error'?'Қате':phase==='loaded'?'Видео жүктелді':'Видеоны жүктеңіз'
   const readyToAnalyze=!!url&&duration>0&&end>start&&end-start<=60&&phase!=='analyzing'
 
@@ -239,7 +244,7 @@ export default function App(){
           <input ref={fileInputRef} type="file" accept="video/mp4,video/webm,video/quicktime" hidden onChange={e=>{loadFile(e.target.files?.[0]);e.target.value=''}}/>
           <button className="upload-row" onClick={()=>fileInputRef.current?.click()}><span className="upload-icon"><Video size={19}/></span><span><b>{fileName||'Видео файлын таңда'}</b><small>{fileName?'Басқа видео жүктеу үшін басыңыз':'Құрылғыңыздан MP4 немесе WebM жүктеңіз'}</small></span><UploadCloud size={18}/></button>
           <div className="field-heading"><label>Үйренетін үзінді</label><span>60 секундқа дейін</span></div>
-          <div className="trim-inputs"><label>Басы <input type="number" min={0} max={Math.max(0,end-.5)} step="0.1" value={Number(start.toFixed(1))} disabled={!url||phase==='analyzing'||phase==='practicing'} onChange={e=>{const n=cap(Number(e.target.value),0,Math.max(0,end-.5));changeSegment(n,Math.min(duration,Math.max(end,n+.5),n+60))}}/> сек</label><label>Соңы <input type="number" min={start+.5} max={Math.min(duration,start+60)} step="0.1" value={Number(end.toFixed(1))} disabled={!url||phase==='analyzing'||phase==='practicing'} onChange={e=>{const n=cap(Number(e.target.value),start+.5,Math.min(duration,start+60));changeSegment(start,n)}}/> сек</label></div>
+          <div className="trim-inputs"><label>Басы <input type="number" min={0} max={Math.max(0,duration-.5)} step="0.1" value={Number(start.toFixed(1))} disabled={!url||phase==='analyzing'||phase==='practicing'} onChange={e=>{const next=moveStart({start,end},duration,Number(e.target.value));changeSegment(next.start,next.end)}}/> сек</label><label>Соңы <input type="number" min={.5} max={duration} step="0.1" value={Number(end.toFixed(1))} disabled={!url||phase==='analyzing'||phase==='practicing'} onChange={e=>{const next=moveEnd({start,end},duration,Number(e.target.value));changeSegment(next.start,next.end)}}/> сек</label></div>
           <div className="trim-track"><span style={{left:`${duration?start/duration*100:0}%`,width:`${duration?(end-start)/duration*100:0}%`}}/></div>
           <div className="settings-divider"/>
           <div className="options-row"><label>Ойнату жылдамдығы</label><div className="speed-pills">{[.25,.5,.75,1].map(n=><button key={n} className={speed===n?'selected':''} disabled={!url} onClick={()=>{setSpeed(n);if(videoRef.current)videoRef.current.playbackRate=n}}>{String(n).replace('.',',')}×</button>)}</div></div>

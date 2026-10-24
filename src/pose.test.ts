@@ -24,6 +24,11 @@ describe('қимылды салыстыру',()=>{
     const p=person();p[15].visibility=.2
     expect(poseIssue(p)).toMatch(/сенімді/)
   })
+  it('бір кадрдағы бірнеше адамға баға шығармайды',()=>{
+    const p=person()
+    expect(poseIssue(p,2)).toMatch(/бірнеше адам/)
+    expect(compare([{time:1,pose:p,poseCount:2}],p,1,0,1,1)).toBeNull()
+  })
   it('уақыт ығысуын бөлек бағалайды',()=>{
     const p=person();const r=compare([{time:1.5,pose:p}],p,1,0,1,1)
     expect(r?.poseScore).toBe(100);expect(r?.timingScore).toBeLessThan(100)
