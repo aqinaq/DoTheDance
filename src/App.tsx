@@ -11,6 +11,7 @@ import { drawCameraOverlay, targetOnCamera } from './overlay'
 import {libraryList,lastLesson,readLesson,saveLesson,removeLesson,storageMessage,type LibraryItem,type SavedLesson} from './library'
 import { cameraFrame } from './cameraFrame'
 import './style.css'
+import './editorial.css'
 
 type Phase='empty'|'loaded'|'analyzing'|'ready'|'countdown'|'practicing'|'paused'|'finished'|'insufficient'|'error'|'selecting'
 const fmt=(s:number)=>`${Math.floor(Math.max(0,s)/60).toString().padStart(2,'0')}:${Math.floor(Math.max(0,s)%60).toString().padStart(2,'0')}`
@@ -368,13 +369,14 @@ export default function App(){
   },[focusMode,phase])
   return <div className={`app ${focusMode&&tab==='studio'?'focus-mode':''}`}>
 
+    <div className="studio-ribbon" aria-label="Өз ырғағыңмен үйрен"><div aria-hidden="true">ӨЗ ЫРҒАҒЫҢМЕН · ҚАЙТАЛА · СЕЗІН · БИЛЕ · ӨЗ ЫРҒАҒЫҢМЕН · ҚАЙТАЛА · СЕЗІН · БИЛЕ ·</div><button onClick={()=>setFocusMode(true)}>Жаттығу алаңы ↗</button></div>
     <header className="topbar"><div className="topbar-inner">
       <button className="brand" onClick={()=>setTab('studio')} aria-label="Басты бет"><span className="brand-mark" aria-hidden="true">d/</span><span>do the <b>dance</b><span className="brand-dot">.</span></span></button>
       <nav className="nav"><button className={tab==='studio'?'active':''} onClick={()=>setTab('studio')}>Студия</button><button className={tab==='history'?'active':''} onClick={openHistory}>Нәтижелер тарихы</button></nav>
       <span className="private-pill"><ShieldCheck size={15}/> Бәрі браузерде</span>
     </div></header>
     <main className="container" hidden={tab!=='studio'}>
-      <div className="workspace-heading"><div><span className="eyebrow">ҚАЙТАЛА. СЕЗІН. БИЛЕ.</span><h1>Сенің би алаңың<span>↗</span></h1></div><div className="view-actions"><button className="secondary-button" onClick={()=>setFocusMode(true)}>Үлкен жаттығу режимі ↗</button><div className={`status-badge ${phase}`}><span/>{statusLabel}</div></div></div>
+      <div className="workspace-heading"><div><span className="eyebrow">ҚАЙТАЛА. СЕЗІН. БИЛЕ.</span><h1>Қимыл.<br/>Сенің ырғағың.<span>↗</span></h1></div><div className="view-actions"><button className="secondary-button" onClick={()=>setFocusMode(true)}>Үлкен жаттығу режимі ↗</button><div className={`status-badge ${phase}`}><span/>{statusLabel}</div></div></div>
       {(error||cameraIssue)&&<div className="notice error-notice" role="alert"><AlertCircle size={18}/><span>{error||cameraIssue}</span><button onClick={()=>{setError('');setCameraIssue('')}} aria-label="Хабарламаны жабу"><X size={16}/></button></div>}
       {focusMode&&<div className="focus-toolbar"><b>do the dance<span> / ЖАТТЫҒУ</span></b><div><button onClick={toggleFullscreen}>{fullScreen?'Экранды кішірейту':'Толық экран ↗'}</button><button onClick={leaveFocus}>Баптауға оралу ×</button></div></div>}
       {focusMode&&screenNotice&&<div className="screen-notice" role="status">{screenNotice}<button onClick={()=>setScreenNotice('')}>×</button></div>}
