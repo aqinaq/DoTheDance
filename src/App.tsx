@@ -8,6 +8,7 @@ import { moveEnd, moveStart } from './clip'
 import { trackDancer, type DetectionFrame, type Anchor } from './tracking'
 import { DancerPicker } from './DancerPicker'
 import { drawCameraOverlay, targetOnCamera } from './overlay'
+import {libraryList,lastLesson,readLesson,saveLesson,removeLesson,storageMessage,type LibraryItem,type SavedLesson} from './library'
 import { cameraFrame } from './cameraFrame'
 import './style.css'
 
@@ -15,6 +16,16 @@ type Phase='empty'|'loaded'|'analyzing'|'ready'|'countdown'|'practicing'|'paused
 const fmt=(s:number)=>`${Math.floor(Math.max(0,s)/60).toString().padStart(2,'0')}:${Math.floor(Math.max(0,s)%60).toString().padStart(2,'0')}`
 
 export default function App(){
+  const [library,setLibrary]=useState<LibraryItem[]>([])
+  const [activeId,setActiveId]=useState<string|null>(null)
+  const [saveStatus,setSaveStatus]=useState('Кітапхана ашылуда…')
+  const [saveError,setSaveError]=useState('')
+  const [saveRetry,setSaveRetry]=useState(0)
+  const mediaFileRef=useRef<Blob|null>(null)
+  const unsavedFileRef=useRef<Blob|null>(null)
+  const restoreRef=useRef<SavedLesson|null>(null)
+  const libraryEpoch=useRef(0)
+  const saveEpoch=useRef(0)
   const [controlTab,setControlTab]=useState<'setup'|'practice'>('setup')
   const cameraInputRef=useRef<HTMLCanvasElement|null>(null)
   const [tab,setTab]=useState<'studio'|'history'>('studio')
@@ -108,19 +119,70 @@ export default function App(){
 
   useEffect(()=>{cueRef.current='';cueAtRef.current=0;setLive(null)},[videoMirror,cameraMirror])
 
+  function restoreLesson(saved:SavedLesson){
+    reset();setActiveId(null);setDuration(0);restoreRef.current=saved
+    mediaFileRef.current=saved.video;unsavedFileRef.current=null
+    if(urlRef.current)URL.revokeObjectURL(urlRef.current)
+    const next=URL.createObjectURL(saved.video);urlRef.current=next;setUrl(next);setFileName(saved.lesson.name);setPhase('loaded');setSaveError('')
+  }
+  useEffect(()=>{
+    let cancelled=false;const epoch=libraryEpoch.current
+    void (async()=>{try{
+      const items=await libraryList();if(cancelled||epoch!==libraryEpoch.current)return;setLibrary(items)
+      const id=await lastLesson();const saved=id?await readLesson(id):null
+      if(cancelled||epoch!==libraryEpoch.current)return
+      if(saved)restoreLesson(saved)
+      setSaveStatus(saved?'Сақталған видео ашылды':'Видео автоматты сақталады')
+    }catch(e){if(!cancelled)setSaveError(storageMessage(e))}})()
+    return()=>{cancelled=true}
+  },[])
+  useEffect(()=>{
+    if(!activeId||!duration||!mediaFileRef.current||restoreRef.current)return
+    const epoch=++saveEpoch.current,blob=unsavedFileRef.current
+    setSaveStatus('Сақталуда…');setSaveError('')
+    void saveLesson(activeId,{name:fileName,start,end,duration,speed,videoMirror,cameraMirror,offset,repeat,detections,anchors,selectionFrame},mediaFileRef.current.size,blob??undefined).then(async()=>{
+      if(epoch!==saveEpoch.current)return
+      if(unsavedFileRef.current===blob)unsavedFileRef.current=null
+      setSaveStatus('Видео мен қимылдар сақталды');setLibrary(await libraryList())
+    }).catch(e=>{if(epoch===saveEpoch.current){setSaveStatus('Сақталмады');setSaveError(storageMessage(e))}})
+  },[activeId,duration,fileName,start,end,speed,videoMirror,cameraMirror,offset,repeat,detections,anchors,selectionFrame,saveRetry])
+  async function openSaved(id:string){
+    const epoch=++libraryEpoch.current;saveEpoch.current++
+    try{const saved=await readLesson(id);if(epoch!==libraryEpoch.current)return;if(saved)restoreLesson(saved);else setSaveError('Сақталған видео табылмады.')}catch(e){setSaveError(storageMessage(e))}
+  }
+  async function deleteSaved(id:string){
+    if(!window.confirm('Осы видео мен сақталған қимылдарын осы браузерден өшіресіз бе?'))return
+    try{
+      if(id===activeId){libraryEpoch.current++;saveEpoch.current++;setActiveId(null);reset();restoreRef.current=null;mediaFileRef.current=null;unsavedFileRef.current=null;if(urlRef.current)URL.revokeObjectURL(urlRef.current);urlRef.current='';setUrl('');setFileName('');setDuration(0);setPhase('empty')}
+      await removeLesson(id);setLibrary(await libraryList());setSaveStatus('Кітапханадан өшірілді')
+    }catch(e){setSaveError(storageMessage(e))}
+  }
+
   function loadFile(file?:File){
     if(!file)return
+    libraryEpoch.current++;saveEpoch.current++;setActiveId(null);restoreRef.current=null;mediaFileRef.current=null;unsavedFileRef.current=null
     reset()
     if(urlRef.current){URL.revokeObjectURL(urlRef.current);urlRef.current=''}
     setUrl('');setFileName('');setDuration(0);setStart(0);setEnd(0)
     const probe=document.createElement('video')
     const issue=videoFileIssue(file,type=>probe.canPlayType(type))
     if(issue){setError(issue);setPhase('error');return}
+    mediaFileRef.current=file;unsavedFileRef.current=file;setActiveId(crypto.randomUUID());setSaveError('')
     const next=URL.createObjectURL(file);urlRef.current=next;setUrl(next);setFileName(file.name);setPhase('loaded')
   }
   function onMetadata(){
     const d=videoRef.current?.duration||0
     if(!Number.isFinite(d)||d<.5){setError('Видео тым қысқа немесе ұзақтығы анықталмады. Басқа файл таңдаңыз.');setPhase('error');return}
+    const restored=restoreRef.current
+    if(restored){
+      restoreRef.current=null;const l=restored.lesson
+      setDuration(d);setStart(l.start);setEnd(Math.min(l.end,d));setSpeed(l.speed);setVideoMirror(l.videoMirror);setCameraMirror(l.cameraMirror);setOffset(l.offset);setRepeat(l.repeat)
+      setDetections(l.detections);setAnchors(l.anchors);setSelectionFrame(Math.min(l.selectionFrame,Math.max(0,l.detections.length-1)))
+      const samples=trackDancer(l.detections,l.anchors),good=samples.filter(s=>!poseIssue(s.pose)).length
+      samplesRef.current=samples;setValidSamples(good);setSourceReady(good>=3);setShowPicker(l.detections.length>0&&!l.anchors.length)
+      setPhase(good>=3?'ready':l.detections.length?(l.anchors.length?'insufficient':'selecting'):'loaded');setModelStatus(l.detections.length?'Сақталған қимылдар жүктелді':'Үзіндіні талдаңыз')
+      if(videoRef.current){videoRef.current.playbackRate=l.speed;videoRef.current.currentTime=l.start}setPlayhead(l.start);setActiveId(restored.id);return
+    }
     if(videoRef.current)videoRef.current.playbackRate=speed
     setDuration(d);setStart(0);setEnd(Math.min(60,d));setPlayhead(0)
   }
@@ -300,6 +362,7 @@ export default function App(){
         <section className="panel settings-panel" hidden={controlTab!=='setup'}><div className="panel-head"><div><div className="section-kicker">01 / ДАЙЫНДЫҚ</div><h3>Сабақты баптау</h3></div><span className="panel-icon"><UploadCloud size={20}/></span></div>
           <input ref={fileInputRef} type="file" accept="video/mp4,video/webm,video/quicktime" hidden onChange={e=>{loadFile(e.target.files?.[0]);e.target.value=''}}/>
           <button className="upload-row" onClick={()=>fileInputRef.current?.click()}><span className="upload-icon"><Video size={19}/></span><span><b>{fileName||'Видео файлын таңда'}</b><small>{fileName?'Басқа видео жүктеу үшін басыңыз':'Құрылғыңыздан MP4 немесе WebM жүктеңіз'}</small></span><UploadCloud size={18}/></button>
+          <details className="video-library"><summary>Сақталған видеолар <span>{library.length}</span></summary><p>Видео мен қимылдар осы браузерде сақталады. Камера жазылмайды. Браузер деректерін тазаласаң, кітапхана да өшеді.</p>{library.length?library.map(item=><div className="library-item" key={item.id}><button onClick={()=>openSaved(item.id)} aria-pressed={activeId===item.id}><b>{item.name}</b><small>{(item.size/1024/1024).toFixed(1)} МБ · {item.hasMotion?'Қимылдар сақталған':'Талданбаған'}</small></button><button aria-label={`${item.name} видеосын өшіру`} onClick={()=>deleteSaved(item.id)}><Trash2 size={15}/></button></div>):<p>Жүктелген видео осында автоматты сақталады.</p>}</details>
           <div className="field-heading"><label>Үйренетін үзінді</label><span>60 секундқа дейін</span></div>
           <div className="trim-inputs"><label>Басы <input type="number" min={0} max={Math.max(0,duration-.5)} step="0.1" value={Number(start.toFixed(1))} disabled={!url||phase==='analyzing'||phase==='practicing'} onChange={e=>{const next=moveStart({start,end},duration,Number(e.target.value));changeSegment(next.start,next.end)}}/> сек</label><label>Соңы <input type="number" min={.5} max={duration} step="0.1" value={Number(end.toFixed(1))} disabled={!url||phase==='analyzing'||phase==='practicing'} onChange={e=>{const next=moveEnd({start,end},duration,Number(e.target.value));changeSegment(next.start,next.end)}}/> сек</label></div>
           <div className="trim-track"><span style={{left:`${duration?start/duration*100:0}%`,width:`${duration?(end-start)/duration*100:0}%`}}/></div>
@@ -320,7 +383,7 @@ export default function App(){
 
           <p className="practice-hint"><Timer size={15}/> Басталар алдында 3 секундтық кері санақ жүреді.</p>
         </section>
-      <div className="model-footnote">{modelStatus}</div></aside></div>
+      <div className="model-footnote">{modelStatus}<div className="library-status" role="status">{saveStatus}</div>{saveError&&<div className="library-error" role="alert">{saveError}<button type="button" onClick={()=>setSaveRetry(n=>n+1)}>Қайта сақтау</button></div>}</div></aside></div>
       {detections.length>0&&phase!=='analyzing'&&<section className="tracking-panel" aria-label="Бишіні бақылау">
         <div><h3>{showPicker?'Видеода үйренетін бишіңді белгіле':'Таңдалған бишіні бақылау'}</h3><p>{showPicker?'Нөмірленген жақтауды басыңыз. Адамдар бірін-бірі жаппайтын кадрды таңдаңыз.':'Жасыл сызық тек таңдалған бишіні көрсетеді. Күмәнді кадрлар бағаланбайды.'}</p></div>
         <div className="tracking-stats"><span>{anchors.length} белгі</span><span>{Math.round(validSamples/detections.length*100)}% жарамды кадр</span></div>
