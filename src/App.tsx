@@ -369,7 +369,6 @@ export default function App(){
   },[focusMode,phase])
   return <div className={`app ${focusMode&&tab==='studio'?'focus-mode':''}`}>
 
-    <div className="studio-ribbon" aria-label="Өз ырғағыңмен үйрен"><div aria-hidden="true">ӨЗ ЫРҒАҒЫҢМЕН · ҚАЙТАЛА · СЕЗІН · БИЛЕ · ӨЗ ЫРҒАҒЫҢМЕН · ҚАЙТАЛА · СЕЗІН · БИЛЕ ·</div><button onClick={()=>setFocusMode(true)}>Жаттығу алаңы ↗</button></div>
     <header className="topbar"><div className="topbar-inner">
       <button className="brand" onClick={()=>setTab('studio')} aria-label="Басты бет"><span className="brand-mark" aria-hidden="true">d/</span><span>do the <b>dance</b><span className="brand-dot">.</span></span></button>
       <nav className="nav"><button className={tab==='studio'?'active':''} onClick={()=>setTab('studio')}>Студия</button><button className={tab==='history'?'active':''} onClick={openHistory}>Нәтижелер тарихы</button></nav>
