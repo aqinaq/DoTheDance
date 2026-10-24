@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compare, poseIssue, type Pose } from './pose'
+import { compare, reflectPose, poseIssue, type Pose } from './pose'
 import { summarize } from './results'
 
 function person():Pose {
@@ -42,5 +42,26 @@ describe('қорытынды',()=>{
     const frames=[{time:1,comparison:c},{time:1.2,comparison:c},{time:1.4,comparison:c},{time:1.6,comparison:null}]
     const s=summarize(frames,'би')!
     expect(s.valid).toBe(3);expect(s.total).toBe(4);expect(s.score).toBe(100)
+  })
+})
+
+describe('independent mirror settings',()=>{
+  const asymmetric=()=>{const p=person();p[13].y=.24;p[15].y=.12;return p}
+  it.each([[false,false],[true,true],[true,false],[false,true]])('matches displayed pose: camera %s, source %s',(cameraMirror,videoMirror)=>{
+    const p=asymmetric()
+    const camera=cameraMirror!==videoMirror?reflectPose(p):p
+    expect(compare([{time:1,pose:p}],camera,1,0,1,1,cameraMirror,videoMirror)?.poseScore).toBe(100)
+    expect(compare([{time:1,pose:p}],camera,1,0,1,1,cameraMirror,videoMirror)?.highlight).toEqual([])
+  })
+  it('does not reward the wrong side in opposite mirror modes',()=>{
+    const p=asymmetric()
+    expect(compare([{time:1,pose:p}],p,1,0,1,1,true,false)!.poseScore).toBeLessThan(90)
+  })
+  it('preserves input and is reversible',()=>{
+    const p=asymmetric(),saved=JSON.stringify(p)
+    const reflected=reflectPose(p)
+    expect(reflected[16].y).toBe(p[15].y)
+    expect(reflectPose(reflected)[15].x).toBeCloseTo(p[15].x)
+    expect(JSON.stringify(p)).toBe(saved)
   })
 })

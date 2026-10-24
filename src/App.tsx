@@ -25,7 +25,8 @@ export default function App(){
   const [muted,setMuted]=useState(false)
   const [speed,setSpeed]=useState(1)
   const [repeat,setRepeat]=useState(false)
-  const [mirror,setMirror]=useState(false)
+  const [videoMirror,setVideoMirror]=useState(false)
+  const [cameraMirror,setCameraMirror]=useState(true)
   const [offset,setOffset]=useState(0)
   const [phase,setPhase]=useState<Phase>('empty')
   const [progress,setProgress]=useState(0)
@@ -64,17 +65,17 @@ export default function App(){
     streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null
     detectorRef.current?.close();detectorRef.current=null
     if(cameraRef.current) cameraRef.current.srcObject=null
-    drawPose(cameraCanvasRef.current,null,mirror)
+    drawPose(cameraCanvasRef.current,null,false)
     setCameraOn(false);setCameraIssue('');lastCameraPoseRef.current=null
-  },[mirror])
+  },[])
   const reset=useCallback(()=>{
     sessionRef.current++;abortRef.current?.abort();abortRef.current=null
     videoRef.current?.pause();stopCamera()
     setDetections([]);setAnchors([]);setShowPicker(false);setReferenceNotice('')
     samplesRef.current=[];framesRef.current=[];setLive(null);setSummary(null);setValidSamples(0);setSourceReady(false);setProgress(0);setModelStatus('Модель жүктелмеген')
     setPlayhead(0);setPlaying(false);setCountdown(0);setError('');setOffset(0)
-    drawPose(videoCanvasRef.current,null,mirror)
-  },[stopCamera,mirror])
+    drawPose(videoCanvasRef.current,null,videoMirror)
+  },[stopCamera,videoMirror])
   useEffect(()=>()=>{sessionRef.current++;abortRef.current?.abort();streamRef.current?.getTracks().forEach(t=>t.stop());detectorRef.current?.close();if(urlRef.current)URL.revokeObjectURL(urlRef.current)},[])
   useEffect(()=>{const handler=()=>{streamRef.current?.getTracks().forEach(t=>t.stop())};window.addEventListener('pagehide',handler);return()=>window.removeEventListener('pagehide',handler)},[])
   useEffect(()=>{
@@ -82,18 +83,20 @@ export default function App(){
     const ro=new ResizeObserver(()=>{
       canvases.forEach(c=>{if(c){c.width=c.clientWidth*devicePixelRatio;c.height=c.clientHeight*devicePixelRatio}})
       const video=videoRef.current,camera=cameraRef.current,sample=nearestSample(samplesRef.current,video?.currentTime??0)
-      drawPose(videoCanvasRef.current,sample&&!poseIssue(sample.pose,sample.poseCount)?sample.pose:null,mirror,[],video?.videoWidth,video?.videoHeight)
-      drawPose(cameraCanvasRef.current,lastCameraPoseRef.current,mirror,[],camera?.videoWidth,camera?.videoHeight)
+      drawPose(videoCanvasRef.current,sample&&!poseIssue(sample.pose,sample.poseCount)?sample.pose:null,videoMirror,[],video?.videoWidth,video?.videoHeight)
+      drawPose(cameraCanvasRef.current,lastCameraPoseRef.current,cameraMirror,[],camera?.videoWidth,camera?.videoHeight)
     })
     canvases.forEach(c=>{if(c){ro.observe(c);c.width=c.clientWidth*devicePixelRatio;c.height=c.clientHeight*devicePixelRatio}})
     return()=>ro.disconnect()
-  },[tab,mirror])
+  },[tab,videoMirror,cameraMirror])
   const drawReference=useCallback((time:number)=>{
     const el=videoRef.current
     const sample=nearestSample(samplesRef.current,time)
-    drawPose(videoCanvasRef.current,sample&&!poseIssue(sample.pose,sample.poseCount)?sample.pose:null,mirror,[],el?.videoWidth,el?.videoHeight)
-  },[mirror])
-  useEffect(()=>{drawReference(videoRef.current?.currentTime??0);drawPose(cameraCanvasRef.current,lastCameraPoseRef.current,mirror,live?.highlight,cameraRef.current?.videoWidth,cameraRef.current?.videoHeight)},[mirror,live,drawReference])
+    drawPose(videoCanvasRef.current,sample&&!poseIssue(sample.pose,sample.poseCount)?sample.pose:null,videoMirror,[],el?.videoWidth,el?.videoHeight)
+  },[videoMirror])
+  useEffect(()=>{drawReference(videoRef.current?.currentTime??0);drawPose(cameraCanvasRef.current,lastCameraPoseRef.current,cameraMirror,live?.highlight,cameraRef.current?.videoWidth,cameraRef.current?.videoHeight)},[videoMirror,cameraMirror,live,drawReference])
+
+  useEffect(()=>{cueRef.current='';cueAtRef.current=0;setLive(null)},[videoMirror,cameraMirror])
 
   function loadFile(file?:File){
     if(!file)return
@@ -198,7 +201,7 @@ export default function App(){
     setDetections([]);setAnchors([]);setShowPicker(false);setReferenceNotice('');setError('');setModelStatus('Үзіндіні талдаңыз')
     samplesRef.current=[];framesRef.current=[];setValidSamples(0);setSourceReady(false);setSummary(null);setLive(null)
     setCountdown(0);setStart(nextStart);setEnd(nextEnd);setPhase('loaded');setProgress(0)
-    drawPose(videoCanvasRef.current,null,mirror)
+    drawPose(videoCanvasRef.current,null,videoMirror)
   }
   function openHistory(){
     if(phase==='countdown'){sessionRef.current++;setCountdown(0);setPhase('ready')}
@@ -228,13 +231,13 @@ export default function App(){
           const issue=poseIssue(pose,observation.poseCount);lastCameraPoseRef.current=issue?null:pose;setCameraIssue(issue||'')
           const reference=nearestSample(samplesRef.current,vid.currentTime+offset)
           setReferenceNotice(!reference?.pose?'Таңдалған биші көрінбейді немесе бақылау күмәнді. Бұл кадр бағаланбайды.':poseIssue(reference.pose)?'Үлгідегі дене нүктелері анық емес. Бұл кадр бағаланбайды.':'')
-          const result=!issue&&pose?compare(samplesRef.current,pose,vid.currentTime,offset,vid.videoWidth/vid.videoHeight,cam.videoWidth/cam.videoHeight,mirror):null
+          const result=!issue&&pose?compare(samplesRef.current,pose,vid.currentTime,offset,vid.videoWidth/vid.videoHeight,cam.videoWidth/cam.videoHeight,cameraMirror,videoMirror):null
           framesRef.current.push({time:vid.currentTime,comparison:result})
           if(result){
             if(now-cueAtRef.current>1800||!cueRef.current){cueRef.current=result.cue;cueAtRef.current=now}
             setLive({...result,cue:cueRef.current})
           }else setLive(null)
-          drawPose(cameraCanvasRef.current,issue?null:pose,mirror,result?.highlight||[],cam.videoWidth,cam.videoHeight)
+          drawPose(cameraCanvasRef.current,issue?null:pose,cameraMirror,result?.highlight||[],cam.videoWidth,cam.videoHeight)
           drawReference(vid.currentTime)
         }catch{setCameraIssue('Камера кадры талданбады. Жаттығуды қайта бастаңыз.');pause();return}
       }
@@ -242,7 +245,7 @@ export default function App(){
     }
     raf=requestAnimationFrame(tick)
     return()=>cancelAnimationFrame(raf)
-  },[phase,offset,mirror,drawReference])
+  },[phase,offset,videoMirror,cameraMirror,drawReference])
   useEffect(()=>{
     if(!cameraOn||phase==='practicing'||phase==='countdown')return
     let raf=0,last=0
@@ -250,13 +253,13 @@ export default function App(){
       const cam=cameraRef.current,detector=detectorRef.current
       if(now-last>=180&&cam&&detector&&cam.readyState>=2){
         last=now
-        try{const observation=detector.detect(cam,now);const pose=observation.pose;const issue=poseIssue(pose,observation.poseCount);lastCameraPoseRef.current=issue?null:pose;setCameraIssue(issue||'');drawPose(cameraCanvasRef.current,issue?null:pose,mirror,[],cam.videoWidth,cam.videoHeight)}catch{setCameraIssue('Камера кадры талданбады. Камераны қайта қосыңыз.');return}
+        try{const observation=detector.detect(cam,now);const pose=observation.pose;const issue=poseIssue(pose,observation.poseCount);lastCameraPoseRef.current=issue?null:pose;setCameraIssue(issue||'');drawPose(cameraCanvasRef.current,issue?null:pose,cameraMirror,[],cam.videoWidth,cam.videoHeight)}catch{setCameraIssue('Камера кадры талданбады. Камераны қайта қосыңыз.');return}
       }
       raf=requestAnimationFrame(tick)
     }
     raf=requestAnimationFrame(tick)
     return()=>cancelAnimationFrame(raf)
-  },[cameraOn,phase,mirror])
+  },[cameraOn,phase,cameraMirror])
   const canPractice=sourceReady&&['ready','paused','finished','insufficient'].includes(phase)&&validSamples>0
   const statusLabel=phase==='selecting'?'Бишіні таңдаңыз':phase==='analyzing'?`Талдануда · ${progress}%`:phase==='practicing'?'Жаттығу жүріп жатыр':phase==='countdown'?'Дайындалу':phase==='ready'?'Жаттығуға дайын':phase==='finished'?'Сабақ аяқталды':phase==='insufficient'?'Дерек жеткіліксіз':phase==='error'?'Қате':phase==='loaded'?'Видео жүктелді':'Видеоны жүктеңіз'
   const readyToAnalyze=!!url&&duration>0&&end>start&&end-start<=60&&phase!=='analyzing'
@@ -274,11 +277,11 @@ export default function App(){
       {(error||cameraIssue)&&<div className="notice error-notice" role="alert"><AlertCircle size={18}/><span>{error||cameraIssue}</span><button onClick={()=>{setError('');setCameraIssue('')}} aria-label="Хабарламаны жабу"><X size={16}/></button></div>}
       <div className="studio-grid">
         <div className="media-card"><div className="card-head"><div className="card-icon purple"><Video size={18}/></div><div><h3>Үлгі видео</h3><p>Қайталайтын биің</p></div><span className="card-tag">ҮЛГІ</span></div>
-          <div className="stage"><video ref={videoRef} src={url||undefined} playsInline muted={muted} onLoadedMetadata={onMetadata} onError={onVideoError} onTimeUpdate={onTimeUpdate} onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)} style={{transform:mirror?'scaleX(-1)':undefined}}/><canvas ref={videoCanvasRef} className="pose-canvas"/>{showPicker&&detections[selectionFrame]&&<DancerPicker frame={detections[selectionFrame]} width={videoRef.current?.videoWidth||1} height={videoRef.current?.videoHeight||1} mirror={mirror} selected={anchors.find(a=>a.frame===selectionFrame)?.person} onSelect={selectDancer}/>}{!url&&<div className="stage-empty"><span className="empty-orbit"><UploadCloud size={30}/></span><strong>Әуелі би видеосын жүкте</strong><small>MP4 немесе WebM · 200 МБ дейін</small><button className="small-cta" onClick={()=>fileInputRef.current?.click()}>Видео таңдау <ArrowRight size={15}/></button></div>}{phase==='analyzing'&&<div className="stage-progress"><div className="loading-ring"/><b>Қимылдар талдануда</b><small>{progress}%</small></div>}</div>
+          <div className="stage"><video ref={videoRef} src={url||undefined} playsInline muted={muted} onLoadedMetadata={onMetadata} onError={onVideoError} onTimeUpdate={onTimeUpdate} onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)} style={{transform:videoMirror?'scaleX(-1)':undefined}}/><canvas ref={videoCanvasRef} className="pose-canvas"/>{showPicker&&detections[selectionFrame]&&<DancerPicker frame={detections[selectionFrame]} width={videoRef.current?.videoWidth||1} height={videoRef.current?.videoHeight||1} mirror={videoMirror} selected={anchors.find(a=>a.frame===selectionFrame)?.person} onSelect={selectDancer}/>}{!url&&<div className="stage-empty"><span className="empty-orbit"><UploadCloud size={30}/></span><strong>Әуелі би видеосын жүкте</strong><small>MP4 немесе WebM · 200 МБ дейін</small><button className="small-cta" onClick={()=>fileInputRef.current?.click()}>Видео таңдау <ArrowRight size={15}/></button></div>}{phase==='analyzing'&&<div className="stage-progress"><div className="loading-ring"/><b>Қимылдар талдануда</b><small>{progress}%</small></div>}</div>
           <div className="media-controls"><button disabled={!url||showPicker||phase==='analyzing'} onClick={()=>{const v=videoRef.current;if(!v)return;if(phase==='practicing'){pause();return}if(phase==='paused'){void resume();return}if(v.paused)v.play().catch(()=>setError('Видео ойнатылмады.'));else v.pause()}} aria-label={playing?'Кідірту':'Ойнату'}>{playing?<Pause size={17} fill="currentColor"/>:<Play size={17} fill="currentColor"/>}</button><span className="time">{fmt(playhead)}</span><input className="timeline" aria-label="Видео уақыты" type="range" min={0} max={duration||1} step="0.01" value={playhead} disabled={!url||showPicker||phase==='analyzing'} onChange={e=>{const t=Number(e.target.value);if(videoRef.current)videoRef.current.currentTime=t;setPlayhead(t);drawReference(t)}}/><span className="time">{fmt(duration)}</span><button disabled={!url} aria-label={muted?'Дыбысты қосу':'Дыбысты өшіру'} onClick={()=>setMuted(!muted)}>{muted?<VolumeX size={17}/>:<Volume2 size={17}/>}</button></div>
         </div>
         <div className="media-card"><div className="card-head"><div className="card-icon mint"><Camera size={18}/></div><div><h3>Сенің камераң</h3><p>Қимылыңды осы жерден бақылаймыз</p></div><span className={`live-tag ${cameraOn?'on':''}`}><span/> {cameraOn?'ҚОСУЛЫ':'ӨШІРУЛІ'}</span></div>
-          <div className="stage camera-stage"><video ref={cameraRef} autoPlay muted playsInline style={{transform:mirror?'scaleX(-1)':undefined}}/><canvas ref={cameraCanvasRef} className="pose-canvas"/>{!cameraOn&&<div className="stage-empty"><span className="empty-orbit mint-orbit"><Camera size={30}/></span><strong>Камераңды қос</strong><small>Толық денең кадрда көрінсін</small><button className="small-cta mint-cta" onClick={startCamera}>Камераны қосу <ArrowRight size={15}/></button></div>}{countdown>0&&<div className="countdown">{countdown}</div>}</div>
+          <div className="stage camera-stage"><video ref={cameraRef} autoPlay muted playsInline style={{transform:cameraMirror?'scaleX(-1)':undefined}}/><canvas ref={cameraCanvasRef} className="pose-canvas"/>{!cameraOn&&<div className="stage-empty"><span className="empty-orbit mint-orbit"><Camera size={30}/></span><strong>Камераңды қос</strong><small>Толық денең кадрда көрінсін</small><button className="small-cta mint-cta" onClick={startCamera}>Камераны қосу <ArrowRight size={15}/></button></div>}{countdown>0&&<div className="countdown">{countdown}</div>}</div>
           <div className="camera-bottom"><span><span className={`camera-indicator ${cameraOn?'on':''}`}/>{cameraOn?'Камера дайын':'Камера қосылмаған'}</span>{cameraOn?<button onClick={()=>{if(phase==='practicing'||phase==='paused')finish();if(phase==='countdown'){sessionRef.current++;setCountdown(0);setPhase('ready')}stopCamera()}}>Камераны өшіру</button>:<span>Жарық жақсы болуы керек</span>}</div>
         </div>
       </div>
@@ -300,7 +303,9 @@ export default function App(){
           <div className="settings-divider"/>
           <div className="options-row"><label>Ойнату жылдамдығы</label><div className="speed-pills">{[.25,.5,.75,1].map(n=><button key={n} className={speed===n?'selected':''} disabled={!url} onClick={()=>{setSpeed(n);if(videoRef.current)videoRef.current.playbackRate=n}}>{String(n).replace('.',',')}×</button>)}</div></div>
           <div className="toggle-row"><div><b>Үзіндіні қайталау</b><small>Таңдалған аралықты қайта ойнату</small></div><button className={`switch ${repeat?'on':''}`} onClick={()=>setRepeat(!repeat)} aria-label="Үзіндіні қайталау" aria-pressed={repeat}><span/></button></div>
-          <div className="toggle-row"><div><b>Айна режимі</b><small>Екі бейне де айнаша көрсетіледі</small></div><button className={`switch ${mirror?'on':''}`} onClick={()=>setMirror(!mirror)} aria-label="Айна режимі" aria-pressed={mirror}><span/></button></div>
+          <div className="toggle-row"><div><b>Видеоның айна режимі</b><small>{videoMirror?'Қосулы · видео айнаша көрсетіледі':'Өшірулі · видео бастапқы күйінде'}</small></div><button className={`switch ${videoMirror?'on':''}`} onClick={()=>setVideoMirror(v=>!v)} aria-label="Видеоның айна режимі" aria-pressed={videoMirror}><span/></button></div>
+          <div className="toggle-row"><div><b>Камераның айна режимі</b><small>{cameraMirror?'Қосулы · өзіңді айнадағыдай көресің':'Өшірулі · камера бастапқы күйінде'}</small></div><button className={`switch ${cameraMirror?'on':''}`} onClick={()=>setCameraMirror(v=>!v)} aria-label="Камераның айна режимі" aria-pressed={cameraMirror}><span/></button></div>
+          <p className="privacy-note">Экрандағы қимылды қайтала. Салыстыру екі бейненің айна баптауларын ескереді.</p>
           <button className="primary-button" disabled={!readyToAnalyze} onClick={analyze}>{phase==='analyzing'?`Талданып жатыр · ${progress}%`:<><Sparkles size={18}/> Видеоны талдау <ArrowRight size={18}/></>}</button>
           <p className="privacy-note"><ShieldCheck size={15}/> Видео құрылғыңызда өңделеді және серверге жіберілмейді.</p>
         </section>

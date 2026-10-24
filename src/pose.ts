@@ -53,19 +53,31 @@ function scorePair(reference: Pose, current: Pose, refAspect: number, camAspect:
   return {score:mean(scores)*.75+mean(positional)*.25, scores, a, b}
 }
 
-export function compare(reference: Sample[], current: Pose, time: number, offset: number, refAspect: number, camAspect: number, mirrored = false): Comparison | null {
+// Reflect spatial coordinates and exchange anatomical sides so displayed poses match.
+export function reflectPose(pose: Pose): Pose {
+  const reflected=pose.map(p=>({...p,x:1-p.x}))
+  for(const [left,right] of [[1,4],[2,5],[3,6],[7,8],[9,10],[11,12],[13,14],[15,16],[17,18],[19,20],[21,22],[23,24],[25,26],[27,28],[29,30],[31,32]]){
+    [reflected[left],reflected[right]]=[reflected[right],reflected[left]]
+  }
+  return reflected
+}
+
+export function compare(reference: Sample[], current: Pose, time: number, offset: number, refAspect: number, camAspect: number, mirrored = false, referenceMirrored = mirrored): Comparison | null {
   if (poseIssue(current)) return null
   const target=time+offset
   const currentSample=nearestSample(reference,target)
   if(!currentSample||poseIssue(currentSample.pose,currentSample.poseCount)||currentSample.trackState==='lost'||currentSample.trackState==='ambiguous'||target<reference[0].time-.05||target>reference[reference.length-1].time+.05)return null
   const candidates=reference.filter(s=>s.segment===currentSample.segment && s.pose && !poseIssue(s.pose,s.poseCount) && Math.abs(s.time-target)<=.75)
   if (!candidates.length) return null
-  const evaluated=candidates.map(s=>({s, ...scorePair(s.pose!,current,refAspect,camAspect)}))
+  const evaluated=candidates.map(s=>{
+    const pose=mirrored!==referenceMirrored?reflectPose(s.pose!):s.pose!
+    return {s,pose,...scorePair(pose,current,refAspect,camAspect)}
+  })
   const best=evaluated.sort((x,y)=>y.score-x.score)[0]
   const parts: Record<Part, number>={Қол:0,Дене:0,Аяқ:0}
   ;(['Қол','Дене','Аяқ'] as Part[]).forEach(part=>{const v=best.scores.filter((_,i)=>groups[i]===part);parts[part]=Math.round(v.reduce((s,x)=>s+x,0)/v.length*100)})
   const worst=best.scores.indexOf(Math.min(...best.scores))
-  const ref=normalized(best.s.pose!,refAspect,indices[worst]), cur=normalized(current,camAspect,indices[worst])
+  const ref=normalized(best.pose,refAspect,indices[worst]), cur=normalized(current,camAspect,indices[worst])
   const dx=(ref.x-cur.x)*(mirrored?-1:1)
   const instruction=ref.y<cur.y-.12?'жоғарырақ көтер':ref.y>cur.y+.12?'төменірек түсір':dx<-.12?'солға қарай жылжыт':dx>.12?'оңға қарай жылжыт':'қалпын түзет'
   return {
