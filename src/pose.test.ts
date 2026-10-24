@@ -30,7 +30,7 @@ describe('қимылды салыстыру',()=>{
     expect(compare([{time:1,pose:p,poseCount:2}],p,1,0,1,1)).toBeNull()
   })
   it('уақыт ығысуын бөлек бағалайды',()=>{
-    const p=person();const r=compare([{time:1.5,pose:p}],p,1,0,1,1)
+    const p=person();const early=person();early[15].y=.3;const r=compare([{time:1,pose:early},{time:1.5,pose:p}],p,1,0,1,1)
     expect(r?.poseScore).toBe(100);expect(r?.timingScore).toBeLessThan(100)
   })
 })

@@ -1,7 +1,7 @@
 import type { NormalizedLandmark } from '@mediapipe/tasks-vision'
 
 export type Pose = NormalizedLandmark[]
-export type Sample = { time: number; pose: Pose | null; poseCount?: number }
+export type Sample = { time: number; pose: Pose | null; poseCount?: number; trackState?: 'tracked'|'lost'|'ambiguous'; trackReason?: string; segment?: number; personIndex?: number }
 export type Part = 'Қол' | 'Дене' | 'Аяқ'
 export type Comparison = { poseScore: number; timingScore: number; parts: Record<Part, number>; cue: string; highlight: number[]; matchedTime: number }
 
@@ -56,7 +56,9 @@ function scorePair(reference: Pose, current: Pose, refAspect: number, camAspect:
 export function compare(reference: Sample[], current: Pose, time: number, offset: number, refAspect: number, camAspect: number, mirrored = false): Comparison | null {
   if (poseIssue(current)) return null
   const target=time+offset
-  const candidates=reference.filter(s=>s.pose && !poseIssue(s.pose,s.poseCount) && Math.abs(s.time-target)<=.75)
+  const currentSample=nearestSample(reference,target)
+  if(!currentSample||poseIssue(currentSample.pose,currentSample.poseCount)||currentSample.trackState==='lost'||currentSample.trackState==='ambiguous'||target<reference[0].time-.05||target>reference[reference.length-1].time+.05)return null
+  const candidates=reference.filter(s=>s.segment===currentSample.segment && s.pose && !poseIssue(s.pose,s.poseCount) && Math.abs(s.time-target)<=.75)
   if (!candidates.length) return null
   const evaluated=candidates.map(s=>({s, ...scorePair(s.pose!,current,refAspect,camAspect)}))
   const best=evaluated.sort((x,y)=>y.score-x.score)[0]

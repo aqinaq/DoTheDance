@@ -1,20 +1,21 @@
 import { FilesetResolver, PoseLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision'
-import type { Sample, Pose } from './pose'
+import type { Pose } from './pose'
+import { appearanceFromPixels, deduplicatePoses, type DetectionFrame } from './tracking'
 
 const version='0.10.35'
 const wasm=`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${version}/wasm`
 const model='https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task'
 let visionPromise: ReturnType<typeof FilesetResolver.forVisionTasks> | null=null
-async function createLandmarker(numPoses: number) {
-  visionPromise ||= FilesetResolver.forVisionTasks(wasm)
-  return PoseLandmarker.createFromOptions(await visionPromise,{baseOptions:{modelAssetPath:model,delegate:'CPU'},runningMode:'VIDEO',numPoses,minPoseDetectionConfidence:.6,minPosePresenceConfidence:.6,minTrackingConfidence:.6})
+async function createLandmarker(numPoses: number, runningMode:'IMAGE'|'VIDEO') {
+  visionPromise ||= FilesetResolver.forVisionTasks(wasm).catch(error=>{visionPromise=null;throw error})
+  return PoseLandmarker.createFromOptions(await visionPromise,{baseOptions:{modelAssetPath:numPoses>2?model.replaceAll('pose_landmarker_lite','pose_landmarker_full'):model,delegate:'CPU'},runningMode,numPoses,minPoseDetectionConfidence:numPoses>2?.4:.6,minPosePresenceConfidence:.5,minTrackingConfidence:.5})
 }
-export type Observation = { pose: Pose | null; poseCount: number }
-export type Detector = { detect: (video: HTMLVideoElement, timestamp: number) => Observation; close: () => void }
-export async function createDetector(numPoses = 2): Promise<Detector> {
-  const landmarker=await createLandmarker(numPoses)
+export type Observation = { pose: Pose | null; poseCount: number; poses: Pose[] }
+export type Detector = { detect: (video: HTMLVideoElement | HTMLCanvasElement, timestamp: number) => Observation; close: () => void }
+export async function createDetector(numPoses = 2, runningMode:'IMAGE'|'VIDEO' = 'VIDEO'): Promise<Detector> {
+  const landmarker=await createLandmarker(numPoses,runningMode)
   return {
-    detect(video,timestamp) { const result=landmarker.detectForVideo(video,timestamp); return {pose:(result.landmarks[0] as NormalizedLandmark[] | undefined) ?? null,poseCount:result.landmarks.length} },
+    detect(video,timestamp) { const result=runningMode==='VIDEO'?landmarker.detectForVideo(video,timestamp):landmarker.detect(video); return {pose:(result.landmarks[0] as NormalizedLandmark[] | undefined) ?? null,poseCount:result.landmarks.length,poses:result.landmarks} },
     close(){landmarker.close()}
   }
 }
@@ -28,24 +29,39 @@ function waitFor(el: HTMLVideoElement,event: string,signal: AbortSignal) {
     el.addEventListener(event,done,{once:true});el.addEventListener('error',fail,{once:true});signal.addEventListener('abort',abort,{once:true})
   })
 }
-export async function analyzeVideo(url: string,start: number,end: number,signal: AbortSignal,onProgress:(n:number)=>void):Promise<Sample[]> {
+export async function analyzeVideo(url: string,start: number,end: number,signal: AbortSignal,onProgress:(n:number)=>void):Promise<DetectionFrame[]> {
   const el=document.createElement('video'); el.muted=true;el.playsInline=true;el.preload='auto';el.src=url
   let detector:Detector|null=null
   try {
     if(el.readyState<1) await waitFor(el,'loadedmetadata',signal)
     if(el.readyState<2) await waitFor(el,'loadeddata',signal)
-    detector=await createDetector(3)
+    detector=await createDetector(6,'IMAGE')
     const duration=end-start
-    const count=Math.min(241,Math.max(2,Math.floor(duration*4)+1))
-    const samples:Sample[]=[]
+    const count=Math.min(481,Math.max(2,Math.floor(duration*8)+1))
+    const samples:DetectionFrame[]=[]
+    const canvas=document.createElement('canvas');canvas.width=320;canvas.height=Math.round(320*el.videoHeight/el.videoWidth)
+    const context=canvas.getContext('2d',{willReadFrequently:true})!
+    const tile=document.createElement('canvas');const tileContext=tile.getContext('2d')!
     for(let i=0;i<count;i++) {
       if(signal.aborted) throw new DOMException('Aborted','AbortError')
       const t=start+duration*i/(count-1)
       if(Math.abs(el.currentTime-t)>.015){el.currentTime=t;await waitFor(el,'seeked',signal)}
-      const observation=detector.detect(el,Math.round(t*1000)+i) // strictly increasing timestamps
-      samples.push({time:t,pose:observation.pose,poseCount:observation.poseCount})
+      const poses=detector.detect(el,Math.round(t*1000)+i).poses
+      // Two overlapping enlarged views recover small dancers missed in the wide shot.
+      for(const left of [.02,.38]){
+        await new Promise<void>(r=>setTimeout(r,0))
+        if(signal.aborted)throw new DOMException('Aborted','AbortError')
+        const crop={x:left,y:.12,w:.6,h:.86}
+        tile.width=Math.round(el.videoWidth*crop.w);tile.height=Math.round(el.videoHeight*crop.h)
+        tileContext.drawImage(el,el.videoWidth*crop.x,el.videoHeight*crop.y,tile.width,tile.height,0,0,tile.width,tile.height)
+        const extra=detector.detect(tile,0).poses.filter(p=>[11,12,23,24,27,28].every(j=>p[j].x>.025&&p[j].x<.975&&p[j].y>.025&&p[j].y<.975))
+        poses.push(...extra.map(p=>p.map(v=>({...v,x:crop.x+v.x*crop.w,y:crop.y+v.y*crop.h,z:v.z*crop.w}))))
+      }
+      context.drawImage(el,0,0,canvas.width,canvas.height)
+      const pixels=context.getImageData(0,0,canvas.width,canvas.height)
+      samples.push({time:t,people:deduplicatePoses(poses.filter(p=>[11,12,23,24].every(i=>(p[i]?.visibility??0)>.45))).slice(0,6).map(pose=>({pose,appearance:appearanceFromPixels(pose,pixels)}))})
       onProgress(Math.round((i+1)/count*100))
-      if(i%3===0) await new Promise<void>(r=>setTimeout(r,0))
+      await new Promise<void>(r=>setTimeout(r,0))
     }
     return samples
   } finally { detector?.close();el.removeAttribute('src');el.load() }
