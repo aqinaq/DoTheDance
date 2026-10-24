@@ -90,12 +90,12 @@ export function compare(reference: Sample[], current: Pose, time: number, offset
   }
 }
 
-export function drawPose(canvas: HTMLCanvasElement | null, pose: Pose | null, mirrored: boolean, highlight: number[] = [], videoWidth?: number, videoHeight?: number) {
+export function drawPose(canvas: HTMLCanvasElement | null, pose: Pose | null, mirrored: boolean, highlight: number[] = [], videoWidth?: number, videoHeight?: number, style: {color?:string; dashed?:boolean; overlay?:boolean} = {}) {
   if (!canvas) return
   const {width,height}=canvas
   const ctx=canvas.getContext('2d')
   if (!ctx) return
-  ctx.clearRect(0,0,width,height)
+  if(!style.overlay) ctx.clearRect(0,0,width,height)
   if (!pose) return
   const scale=videoWidth&&videoHeight?Math.min(width/videoWidth,height/videoHeight):1
   const drawnWidth=videoWidth&&videoHeight?videoWidth*scale:width
@@ -103,18 +103,22 @@ export function drawPose(canvas: HTMLCanvasElement | null, pose: Pose | null, mi
   const left=(width-drawnWidth)/2, top=(height-drawnHeight)/2
   const x=(i:number)=>left+(mirrored?1-pose[i].x:pose[i].x)*drawnWidth
   const y=(i:number)=>top+pose[i].y*drawnHeight
-  ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=Math.max(2,width/180)
+  ctx.save()
+  ctx.setLineDash(style.dashed?[Math.max(5,width/60),Math.max(4,width/90)]:[])
+  ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=Math.max(2,width/180)*(style.dashed?2.2:1)
   for (const [a,b] of connections) {
     if ((pose[a].visibility??0)<.45||(pose[b].visibility??0)<.45) continue
-    ctx.strokeStyle=highlight.includes(a)||highlight.includes(b)?'#f47764':'#a6f0d3'
+    ctx.strokeStyle=highlight.includes(a)||highlight.includes(b)?'#f47764':(style.color||'#a6f0d3')
     ctx.beginPath();ctx.moveTo(x(a),y(a));ctx.lineTo(x(b),y(b));ctx.stroke()
   }
+  ctx.setLineDash([])
   for (const i of required) {
     if ((pose[i].visibility??0)<.45) continue
-    ctx.fillStyle=highlight.includes(i)?'#f47764':'#a6f0d3'
+    ctx.fillStyle=highlight.includes(i)?'#f47764':(style.color||'#a6f0d3')
     ctx.strokeStyle='#172320';ctx.lineWidth=2
-    ctx.beginPath();ctx.arc(x(i),y(i),Math.max(3,width/100),0,Math.PI*2);ctx.fill();ctx.stroke()
+    ctx.beginPath();ctx.arc(x(i),y(i),Math.max(3,width/100)*(style.dashed?1.6:1),0,Math.PI*2);if(!style.dashed)ctx.fill();ctx.strokeStyle=style.dashed?(style.color||'#c4a2ff'):'#172320';ctx.stroke()
   }
+  ctx.restore()
 }
 
 export function nearestSample(samples: Sample[], time: number): Sample | null {
