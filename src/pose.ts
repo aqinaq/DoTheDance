@@ -13,8 +13,12 @@ const clamp = (v: number, a = 0, b = 1) => Math.max(a, Math.min(b, v))
 export function poseIssue(pose: Pose | null, poseCount = pose ? 1 : 0): string | null {
   if (poseCount > 1) return 'Кадрда бірнеше адам бар. Бір адам ғана көрінетін үзіндіні таңдаңыз.'
   if (!pose) return 'Адам анықталмады. Камераға толық денеңізбен көрініңіз.'
-  if (required.some(i => !pose[i] || (pose[i].visibility ?? 0) < .55)) return 'Дене нүктелері сенімді анықталмады. Жарықты арттырып, кадрға толық кіріңіз.'
-  if ([I.LW,I.RW,I.LA,I.RA].some(i => pose[i].x < .025 || pose[i].x > .975 || pose[i].y < .025 || pose[i].y > .975)) return 'Қол не аяқ кадрдан шығып тұр. Камерадан сәл алыстаңыз.'
+  const confident=(i:number)=>!!pose[i]&&(pose[i].visibility??0)>=.55
+  if ([I.LS,I.RS,I.LH,I.RH].some(i=>!confident(i)) ||
+      [I.LE,I.RE,I.LW,I.RW,I.LK,I.RK,I.LA,I.RA].filter(confident).length<6 ||
+      ![I.LW,I.RW].some(confident) || ![I.LA,I.RA].some(confident))
+    return 'Дене нүктелері сенімді анықталмады. Жарықты арттырып, кадрға толық кіріңіз.'
+  if ([I.LW,I.RW,I.LA,I.RA].some(i => confident(i)&&(pose[i].x < .025 || pose[i].x > .975 || pose[i].y < .025 || pose[i].y > .975))) return 'Қол не аяқ кадрдан шығып тұр. Камерадан сәл алыстаңыз.'
   return null
 }
 
@@ -44,13 +48,16 @@ const groups: Part[] = ['Қол','Қол','Дене','Дене','Аяқ','Аяқ
 
 function scorePair(reference: Pose, current: Pose, refAspect: number, camAspect: number) {
   const a=measures(reference,refAspect), b=measures(current,camAspect)
-  const scores=a.map((v,i)=>clamp(1-Math.abs(v-b[i])/90))
-  const positional=[I.LW,I.RW,I.LK,I.RK,I.LA,I.RA].map(i=>{
+  const joints=[[I.LS,I.LE,I.LW],[I.RS,I.RE,I.RW],[I.LE,I.LS,I.LH],[I.RE,I.RS,I.RH],[I.LS,I.LH,I.LK],[I.RS,I.RH,I.RK],[I.LH,I.LK,I.LA],[I.RH,I.RK,I.RA]]
+  const reliable=(i:number)=>(reference[i].visibility??0)>=.55&&(current[i].visibility??0)>=.55
+  const scores=a.map((v,i)=>joints[i].every(reliable)?clamp(1-Math.abs(v-b[i])/90):null)
+  const positional=[I.LW,I.RW,I.LK,I.RK,I.LA,I.RA].filter(reliable).map(i=>{
     const x=normalized(reference,refAspect,i), y=normalized(current,camAspect,i)
     return clamp(1-Math.hypot(x.x-y.x,x.y-y.y)/1.5)
   })
   const mean=(v:number[])=>v.reduce((s,x)=>s+x,0)/v.length
-  return {score:mean(scores)*.75+mean(positional)*.25, scores, a, b}
+  const valid=scores.filter((v):v is number=>v!==null)
+  return {score:valid.length>=4&&positional.length>=3?mean(valid)*.75+mean(positional)*.25:-1, scores}
 }
 
 // Reflect spatial coordinates and exchange anatomical sides so displayed poses match.
@@ -72,11 +79,12 @@ export function compare(reference: Sample[], current: Pose, time: number, offset
   const evaluated=candidates.map(s=>{
     const pose=mirrored!==referenceMirrored?reflectPose(s.pose!):s.pose!
     return {s,pose,...scorePair(pose,current,refAspect,camAspect)}
-  })
+  }).filter(candidate=>candidate.score>=0)
+  if(!evaluated.length)return null
   const best=evaluated.sort((x,y)=>y.score-x.score)[0]
   const parts: Record<Part, number>={Қол:0,Дене:0,Аяқ:0}
-  ;(['Қол','Дене','Аяқ'] as Part[]).forEach(part=>{const v=best.scores.filter((_,i)=>groups[i]===part);parts[part]=Math.round(v.reduce((s,x)=>s+x,0)/v.length*100)})
-  const worst=best.scores.indexOf(Math.min(...best.scores))
+  ;(['Қол','Дене','Аяқ'] as Part[]).forEach(part=>{const v=best.scores.filter((score,i):score is number=>groups[i]===part&&score!==null);parts[part]=v.length?Math.round(v.reduce((s,x)=>s+x,0)/v.length*100):0})
+  const worst=best.scores.indexOf(Math.min(...best.scores.map(v=>v??Infinity)))
   const ref=normalized(best.pose,refAspect,indices[worst]), cur=normalized(current,camAspect,indices[worst])
   const dx=(ref.x-cur.x)*(mirrored?-1:1)
   const instruction=ref.y<cur.y-.12?'жоғарырақ көтер':ref.y>cur.y+.12?'төменірек түсір':dx<-.12?'солға қарай жылжыт':dx>.12?'оңға қарай жылжыт':'қалпын түзет'
@@ -84,8 +92,8 @@ export function compare(reference: Sample[], current: Pose, time: number, offset
     poseScore:Math.round(best.score*100),
     timingScore:Math.round(clamp(1-Math.abs(best.s.time-target)/.75)*100),
     parts,
-    cue:best.scores[worst]>.86?'Қимыл жақсы! Ырғақты сақта.':`${descriptions[worst]} ${instruction}.`,
-    highlight:best.scores[worst]>.86?[]:[indices[worst]],
+    cue:best.scores[worst]!>.86?'Қимыл жақсы! Ырғақты сақта.':`${descriptions[worst]} ${instruction}.`,
+    highlight:best.scores[worst]!>.86?[]:[indices[worst]],
     matchedTime:best.s.time
   }
 }

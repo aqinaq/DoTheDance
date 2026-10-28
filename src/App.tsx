@@ -302,16 +302,17 @@ export default function App(){
     let raf=0,last=0
     const tick=(now:number)=>{
       const cam=cameraRef.current,vid=videoRef.current,detector=detectorRef.current
-      if(now-last>=125&&cam&&vid&&detector&&cam.readyState>=2&&vid.readyState>=2&&!vid.paused&&!vid.seeking){
+      if(now-last>=80&&cam&&vid&&detector&&cam.readyState>=2&&vid.readyState>=2&&!vid.paused&&!vid.seeking){
         last=now
         try{
+          const frameTime=vid.currentTime
           const observation=detector.detect(cameraFrame(cam,cameraInputRef.current??(cameraInputRef.current=document.createElement('canvas'))),now)
           const pose=observation.pose
           const issue=poseIssue(pose,observation.poseCount);lastCameraPoseRef.current=issue?null:pose;setCameraIssue(issue||'')
-          const reference=nearestSample(samplesRef.current,vid.currentTime+offset)
+          const reference=nearestSample(samplesRef.current,frameTime+offset)
           setReferenceNotice(!reference?.pose?'Таңдалған биші көрінбейді немесе бақылау күмәнді. Бұл кадр бағаланбайды.':poseIssue(reference.pose)?'Үлгідегі дене нүктелері анық емес. Бұл кадр бағаланбайды.':'')
-          const result=!issue&&pose?compare(samplesRef.current,pose,vid.currentTime,offset,vid.videoWidth/vid.videoHeight,9/16,cameraMirror,videoMirror):null
-          framesRef.current.push({time:vid.currentTime,comparison:result})
+          const result=!issue&&pose?compare(samplesRef.current,pose,frameTime,offset,vid.videoWidth/vid.videoHeight,9/16,cameraMirror,videoMirror):null
+          framesRef.current.push({time:frameTime,comparison:result})
           if(result){
             if(now-cueAtRef.current>1800||!cueRef.current){cueRef.current=result.cue;cueAtRef.current=now}
             setLive({...result,cue:cueRef.current})
@@ -330,7 +331,7 @@ export default function App(){
     let raf=0,last=0
     const tick=(now:number)=>{
       const cam=cameraRef.current,detector=detectorRef.current
-      if(now-last>=180&&cam&&detector&&cam.readyState>=2){
+      if(now-last>=100&&cam&&detector&&cam.readyState>=2){
         last=now
         try{const observation=detector.detect(cameraFrame(cam,cameraInputRef.current??(cameraInputRef.current=document.createElement('canvas'))),now);const pose=observation.pose;const issue=poseIssue(pose,observation.poseCount);lastCameraPoseRef.current=issue?null:pose;setCameraIssue(issue||'');drawCamera()}catch{setCameraIssue('Камера кадры талданбады. Камераны қайта қосыңыз.');return}
       }

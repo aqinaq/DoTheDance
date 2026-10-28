@@ -8,3 +8,46 @@
 /* Soft paper palette; camera surfaces retain contrast for pose overlays. */
 :root{--ink:#292733;--accent:#7253ce;--line:#d8d5df;color:#292733;background:#f2f1f5}.app{background:#f2f1f5;color:#292733}.topbar{top:0;min-height:100vh}.brand{color:#292733}.nav button{color:#797383}.nav button.active{color:#292733}.nav button:hover{color:#7253ce}.private-pill{color:#7b7586}.workspace-heading{border-color:#d5d1de}.eyebrow,.section-kicker{color:#7d748e}.workspace-heading h1>span{color:#7253ce}.status-badge{color:#756b84}.status-badge.ready,.status-badge.practicing{color:#337960}.status-badge.analyzing{color:#7253ce}.media-card,.control-dock,.result-panel,.history-item,.empty-history{background:#fff}.card-head{background:#f2f1f5;border-color:#d5d1de}.card-number{color:#7253ce}.card-tag{color:#85739f}.live-tag{color:#8c8595}.stage-empty,.camera-stage .stage-empty{background:#292633;color:#f5f2fc}.stage-empty:before{border-color:#554c65}.stage-empty:after{color:#a296b7}.stage-empty small{color:#b4aabe}.empty-orbit{color:#cfc0f3}.small-cta,.mint-cta{background:#7253ce;color:#fff}.media-card>.toggle-row,.media-controls,.camera-bottom{background:#f2f1f5;border-color:#d5d1de}.toggle-row small{color:#8a8195}.switch{background:#d3cddd}.switch.on{background:#7253ce}.media-controls button{color:#40364f}.time,.camera-bottom{color:#83768f}.camera-bottom button{color:#985c6b}.control-dock,.dock-tabs{border-color:#d5d1de}.dock-tabs button{color:#867890}.dock-tabs button[aria-pressed=true]{background:#7253ce;color:#fff}.panel-head h3{color:#292733}.upload-row{background:#f5f2fa;border-color:#c9bfd8;color:#42394e}.upload-row small{color:#8f809e}.field-heading,.options-row{color:#44394f}.field-heading span{color:#92849d}.trim-inputs label{border-color:#d9d0e4;color:#867491}.trim-inputs input{color:#382d44}.trim-track,.score-bar{background:#e6e0ee}.trim-track span{background:#a68bda}.speed-pills{border-color:#d8cee2}.speed-pills button{color:#887297}.speed-pills button.selected{color:#fff;background:#7253ce}.primary-button{background:#7253ce;border-color:#7253ce;color:#fff}.secondary-button{border-color:#c4b5d6;color:#68547d}.privacy-note,.practice-hint,.model-footnote{color:#897a96}.model-footnote{border-color:#e0d7e8}.library-status{color:#537864}.video-library{border-color:#dbd1e4}.video-library p{color:#897996}.library-item>button:first-child{color:#45344f}.library-item>button[aria-pressed=true]{background:#ede5f7}.library-item small{color:#91809e}.practice-state{border-color:#ded4e8}.practice-state p{color:#91829c}.scores>div{background:#f0eaf8}.scores span{color:#877498}.feedback{background:#e8f3ed;border-left-color:#70b597}.feedback p,.feedback-icon svg{color:#527863}.overlay-hint{color:#8c7a99}.offset-row{color:#6e587e}.tracking-panel{background:#ebe5f2;border-color:#d1c3df}.tracking-panel p{color:#84708e}.tracking-stats span{background:#fff;color:#665071}.result-stats>div{background:#f1ecf7}.result-stats small,.result-header p{color:#95849f}.result-medal{background:#7253ce;color:#fff}.recommendation{background:#e7f1eb;color:#557961}.result-footer small{color:#92829b}.history-title p,.history-item small,.history-scores,.empty-history p{color:#90829a}footer{border-color:#d5ccdf;color:#90809b}footer>span:first-child{color:#5a4869}.focus-mode{background:#1d1b23;color:#f3eefb}.focus-mode .card-head{background:#292633;color:#f3eefb}.focus-mode .stage-empty{background:#292633}.focus-mode .media-card{background:#292633;border-color:#665b75}.focus-mode .user-camera-card{border-color:#a6f0d3}.focus-mode .camera-bottom{background:transparent}.focus-bottom .primary-button{background:#7253ce;border-color:#7253ce;color:white}.focus-mode .secondary-button{color:#eee3fa}.focus-toolbar button{border-color:#655775;color:#ede5f6}
 @media(max-width:850px){.topbar{min-height:0}}
+
+/* Reference palette: turquoise and pale mint. */
+:root{--ink:#173b39;--accent:#60d5d0;--lime:#d9fbf3;--line:#b8e8df;color:#173b39;background:#d9fbf3}
+.app{background:#d9fbf3;color:#173b39}
+.studio-ribbon{background:#60d5d0;color:#173b39}
+.studio-ribbon>button,.view-actions .secondary-button,.small-cta,.mint-cta,.dock-tabs button[aria-pressed=true],.speed-pills button.selected,.primary-button,.result-medal,.focus-bottom .primary-button{background:#60d5d0;border-color:#60d5d0;color:#173b39}
+.brand,.nav button.active,.panel-head h3{color:#173b39}
+.nav button:hover,.workspace-heading h1>span,.card-number,.card-tag,.video-library summary span,.text-button,.history-scores b,.history-icon{color:#158985}
+.workspace-heading,.card-head,.media-card>.toggle-row,.control-dock,.dock-tabs,footer{border-color:#b8e8df}
+.card-head,.media-card>.toggle-row,.media-controls,.camera-bottom{background:#d9fbf3}
+.status-badge.ready,.status-badge.practicing,.status-badge.analyzing{color:#167d78}
+.switch.on,.trim-track span,.score-bar span{background:#60d5d0}
+.upload-row,.scores>div,.result-stats>div,.tracking-panel,.recommendation,.feedback,.library-item>button[aria-pressed=true]{background:#e9fdf8}
+.upload-row,.trim-inputs label,.speed-pills,.video-library,.tracking-panel{border-color:#b8e8df}
+.trim-track,.score-bar{background:#c8eee5}
+.secondary-button{border-color:#88d8d0;color:#246c68}
+.focus-mode .user-camera-card{border-color:#60d5d0}
+.focus-bottom .primary-button{color:#173b39}
+
+/* Keep the same mint studio palette and media positions in every view. */
+.nav button,.private-pill,.eyebrow,.section-kicker,.status-badge,.card-tag,.live-tag,
+.time,.camera-bottom,.privacy-note,.practice-hint,.model-footnote,.upload-row small,
+.field-heading span,.trim-inputs label,.speed-pills button,.scores span,.overlay-hint,
+.tracking-panel p,.result-stats small,.result-header p,.result-footer small,
+.history-title p,.history-item small,.history-scores,.empty-history p,footer{color:#52716b}
+.upload-row,.field-heading,.options-row,.trim-inputs input,.offset-row,.library-item>button:first-child{color:#173b39}
+.stage-empty,.camera-stage .stage-empty{background:#193b38;color:#f0fffa}
+.stage-empty:before{border-color:#507c72}.stage-empty:after,.stage-empty small,.empty-orbit{color:#b5d9d0}
+.switch{background:#92bbb0}.feedback p,.feedback-icon svg,.recommendation{color:#335f52}
+.focus-mode{background:#d9fbf3;color:#173b39}
+.focus-mode .media-card,.focus-mode .card-head{background:#d9fbf3;color:#173b39;border-color:#88d8d0}
+.focus-mode .stage-empty{background:#193b38}.focus-mode .card-tag{color:#167d78}
+.focus-toolbar button,.focus-mode .secondary-button{color:#246c68;border-color:#88d8d0}
+.focus-score b{color:#173b39}
+@media(max-width:560px){
+  .focus-mode .studio-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .focus-mode .reference-card{position:relative;inset:auto;width:100%;z-index:auto;border-color:#88d8d0}
+  .focus-mode .reference-card .stage,.focus-mode .user-camera-card .stage{height:calc(100svh - 290px);min-height:240px}
+  .focus-mode .pose-legend{right:0;flex-wrap:wrap}
+  .focus-mode .card-head,.focus-mode .reference-card .card-head{height:34px;padding:4px}
+  .focus-mode .card-head h3{font-size:10px}
+  .focus-mode .stage-empty{padding:8px}.focus-mode .stage-empty strong{font-size:14px}
+}

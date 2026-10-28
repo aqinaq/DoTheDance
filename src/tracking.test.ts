@@ -1,5 +1,5 @@
 import { describe,expect,it } from 'vitest'
-import { trackDancer,deduplicatePoses,type Detection,type DetectionFrame } from './tracking'
+import { trackDancer,deduplicatePoses,mergeCropPoses,type Detection,type DetectionFrame } from './tracking'
 import { compare,type Pose } from './pose'
 function person(x:number,color=0):Detection {
   const pose:Pose=Array.from({length:33},()=>({x,y:.35,z:0,visibility:1}))
@@ -31,6 +31,10 @@ describe('таңдалған бишіні бақылау',()=>{
   it('қайталанған анықтауларды біріктіріп, бөлек бишілерді сақтайды',()=>{
     expect(deduplicatePoses([person(.3).pose,person(.301).pose,person(.65).pose])).toHaveLength(2)
   })
+  it('қиылған кадрдағы сәл ығысқан қаңқаны бір биші деп таниды',()=>{
+    expect(deduplicatePoses([person(.5).pose,person(.535).pose])).toHaveLength(1)
+    expect(deduplicatePoses([person(.5).pose,person(.57).pose])).toHaveLength(2)
+  })
   it('айқасу алдында бақылауды тоқтатады',()=>{
     const f=[frame(0,person(.5),person(.57)),frame(.125,person(.51))]
     expect(trackDancer(f,[{frame:0,person:0}])[1].pose).toBeNull()
@@ -43,5 +47,20 @@ describe('таңдалған бишіні бақылау',()=>{
     const f=[frame(0,person(.5)),frame(.125),frame(.25,person(.5))]
     const samples=trackDancer(f,[{frame:0,person:0},{frame:2,person:0}])
     expect(compare(samples,person(.5).pose,.125,0,1,1)).toBeNull()
+  })
+})
+
+describe('crop detection reconciliation',()=>{
+  it('does not count a shifted crop skeleton as a second dancer',()=>{
+    const original=person(.5).pose
+    expect(mergeCropPoses([original],[person(.55).pose])).toEqual([original])
+  })
+  it('keeps a separate dancer recovered by a crop',()=>{
+    expect(mergeCropPoses([person(.5).pose],[person(.7).pose])).toHaveLength(2)
+    expect(mergeCropPoses([person(.5).pose],[person(.57).pose])).toHaveLength(2)
+  })
+  it('merges repeated crop passes when the full frame missed the dancer',()=>{
+    const first=mergeCropPoses([],[person(.5).pose])
+    expect(mergeCropPoses(first,[person(.55).pose])).toHaveLength(1)
   })
 })

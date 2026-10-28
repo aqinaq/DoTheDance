@@ -37,7 +37,7 @@ describe('timed target overlay',()=>{
     }
   })
   it('hides target when user or reference is unreliable',()=>{
-    const p=person(),low=person();low[15].visibility=.1
+    const p=person(),low=person();low[11].visibility=.1
     expect(targetOnCamera([{time:1,pose:p}],null,1,1,1,false,false)).toBeNull()
     expect(targetOnCamera([{time:1,pose:p}],low,1,1,1,false,false)).toBeNull()
     expect(targetOnCamera([{time:1,pose:low}],p,1,1,1,false,false)).toBeNull()

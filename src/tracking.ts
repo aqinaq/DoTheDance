@@ -83,15 +83,39 @@ export function appearanceFromPixels(pose:Pose,pixels:ImageData):number[]{
 
 function samePosePerson(a:Pose,b:Pose):boolean {
   const ca=center(a),cb=center(b),unit=Math.min(scale(a),scale(b))
-  if(Math.hypot(ca.x-cb.x,ca.y-cb.y)>unit*.5)return false
-  const shared=[11,12,13,14,15,16,23,24,25,26,27,28].filter(i=>(a[i].visibility??0)>.5&&(b[i].visibility??0)>.5)
-  return shared.length>=6&&shared.reduce((sum,i)=>sum+Math.hypot(a[i].x-b[i].x,a[i].y-b[i].y),0)/shared.length/unit<.45
+  const distance=Math.hypot(ca.x-cb.x,ca.y-cb.y)/unit
+  if(distance>.75)return false
+  const shared=[11,12,23,24,13,14,25,26,15,16,27,28].filter(i=>(a[i].visibility??0)>.5&&(b[i].visibility??0)>.5)
+  if(shared.length<4)return false
+  // Cropped views often return a shifted or incomplete skeleton for the same
+  // person. Torso overlap is more stable than wrists and ankles during dance.
+  const torsoDistance=torso.reduce((sum,i)=>sum+Math.hypot(a[i].x-b[i].x,a[i].y-b[i].y),0)/4/unit
+  const limbDistance=shared.reduce((sum,i)=>sum+Math.hypot(a[i].x-b[i].x,a[i].y-b[i].y),0)/shared.length/unit
+  return distance<.3&&torsoDistance<.4&&limbDistance<.85
 }
 export function deduplicatePoses(poses:Pose[]):Pose[]{
   const quality=(p:Pose)=>[11,12,13,14,15,16,23,24,25,26,27,28].reduce((s,i)=>s+(p[i].visibility??0),0)
   const result:Pose[]=[]
   for(const pose of [...poses].sort((a,b)=>quality(b)-quality(a))){
     if(!result.some(other=>samePosePerson(pose,other)))result.push(pose)
+  }
+  return result
+}
+
+/** Crop passes refine a full-frame detection; they must not create another
+ * person inside an already detected torso. Keep the full-frame identity. */
+export function mergeCropPoses(fullFrame:Pose[], cropped:Pose[]):Pose[]{
+  const result=[...fullFrame]
+  for(const candidate of deduplicatePoses(cropped)){
+    const duplicate=result.some(existing=>{
+      if(samePosePerson(existing,candidate))return true
+      const unit=Math.min(scale(existing),scale(candidate))
+      const a=center(existing),b=center(candidate)
+      const torsoError=torso.reduce((sum,i)=>sum+Math.hypot(existing[i].x-candidate[i].x,existing[i].y-candidate[i].y),0)/4/unit
+      const width=Math.max(Math.abs(existing[11].x-existing[12].x),Math.abs(existing[23].x-existing[24].x))
+      return Math.abs(a.x-b.x)<width*.65&&Math.hypot(a.x-b.x,a.y-b.y)<unit*.65&&torsoError<.7
+    })
+    if(!duplicate)result.push(candidate)
   }
   return result
 }

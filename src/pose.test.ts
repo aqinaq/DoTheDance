@@ -20,9 +20,15 @@ describe('қимылды салыстыру',()=>{
     expect(poseIssue(p)).toMatch(/кадрдан/)
     expect(compare([{time:1,pose:person()}],p,1,0,1,1)).toBeNull()
   })
-  it('төмен сенімді нүктелерді қабылдамайды',()=>{
+  it('бір жабылған білезікті есептен шығарып, қалған қимылды бағалайды',()=>{
     const p=person();p[15].visibility=.2
+    expect(poseIssue(p)).toBeNull()
+    expect(compare([{time:1,pose:person()}],p,1,0,1,1)?.poseScore).toBe(100)
+  })
+  it('көп нүкте жабылса баға шығармайды',()=>{
+    const p=person();for(const i of [13,14,15,16])p[i].visibility=.2
     expect(poseIssue(p)).toMatch(/сенімді/)
+    expect(compare([{time:1,pose:person()}],p,1,0,1,1)).toBeNull()
   })
   it('бір кадрдағы бірнеше адамға баға шығармайды',()=>{
     const p=person()
