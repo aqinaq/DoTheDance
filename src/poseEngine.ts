@@ -10,6 +10,7 @@ async function createLandmarker(numPoses: number, runningMode:'IMAGE'|'VIDEO') {
   visionPromise ||= FilesetResolver.forVisionTasks(wasm).catch(error=>{visionPromise=null;throw error})
   return PoseLandmarker.createFromOptions(await visionPromise,{baseOptions:{modelAssetPath:model,delegate:'CPU'},runningMode,numPoses,minPoseDetectionConfidence:numPoses>2?.4:.6,minPosePresenceConfidence:.5,minTrackingConfidence:.5})
 }
+export type DancerMode = 'single' | 'group'
 export type Observation = { pose: Pose | null; poseCount: number; poses: Pose[] }
 export type Detector = { detect: (video: HTMLVideoElement | HTMLCanvasElement, timestamp: number) => Observation; close: () => void }
 export async function createDetector(numPoses = 2, runningMode:'IMAGE'|'VIDEO' = 'VIDEO'): Promise<Detector> {
@@ -29,13 +30,13 @@ function waitFor(el: HTMLVideoElement,event: string,signal: AbortSignal) {
     el.addEventListener(event,done,{once:true});el.addEventListener('error',fail,{once:true});signal.addEventListener('abort',abort,{once:true})
   })
 }
-export async function analyzeVideo(url: string,start: number,end: number,signal: AbortSignal,onProgress:(n:number)=>void):Promise<DetectionFrame[]> {
+export async function analyzeVideo(url: string,start: number,end: number,signal: AbortSignal,onProgress:(n:number)=>void, dancerMode:DancerMode='single'):Promise<DetectionFrame[]> {
   const el=document.createElement('video'); el.muted=true;el.playsInline=true;el.preload='auto';el.src=url
   let detector:Detector|null=null
   try {
     if(el.readyState<1) await waitFor(el,'loadedmetadata',signal)
     if(el.readyState<2) await waitFor(el,'loadeddata',signal)
-    detector=await createDetector(6,'IMAGE')
+    detector=await createDetector(dancerMode==='single'?1:6,'IMAGE')
     const duration=end-start
     const count=Math.min(721,Math.max(2,Math.floor(duration*12)+1))
     const samples:DetectionFrame[]=[]
@@ -47,8 +48,9 @@ export async function analyzeVideo(url: string,start: number,end: number,signal:
       const t=start+duration*i/(count-1)
       if(Math.abs(el.currentTime-t)>.015){el.currentTime=t;await waitFor(el,'seeked',signal)}
       let poses=detector.detect(el,Math.round(t*1000)+i).poses
-      // Two overlapping enlarged views recover small dancers missed in the wide shot.
-      for(const left of [.02,.38]){
+      // Only group videos need crop recovery. On solo videos, overlapping crops
+      // can hallucinate several partial skeletons for one bent or occluded dancer.
+      for(const left of dancerMode==='group'?[.02,.38]:[]){
         await new Promise<void>(r=>setTimeout(r,0))
         if(signal.aborted)throw new DOMException('Aborted','AbortError')
         const crop={x:left,y:.12,w:.6,h:.86}

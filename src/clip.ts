@@ -1,5 +1,9 @@
 const clamp=(value:number,min:number,max:number)=>Math.max(min,Math.min(max,value))
 export type Clip={start:number;end:number}
+export function practiceClip(range:Clip,time:number):Clip {
+  const start=clamp(Number.isFinite(time)?time:range.start,range.start,Math.max(range.start,range.end-.5))
+  return {start,end:Math.min(range.end,start+3)}
+}
 export function moveStart(current:Clip,duration:number,value:number):Clip {
   const length=clamp(current.end-current.start,.5,60)
   const start=clamp(Number.isFinite(value)?value:current.start,0,Math.max(0,duration-.5))

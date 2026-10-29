@@ -1,5 +1,6 @@
+import type { DancerMode } from './poseEngine'
 import type {Anchor,DetectionFrame} from './tracking'
-export type Lesson = {name:string;start:number;end:number;duration:number;speed:number;videoMirror:boolean;cameraMirror:boolean;offset:number;repeat:boolean;detections:DetectionFrame[];anchors:Anchor[];selectionFrame:number}
+export type Lesson = {dancerMode?:DancerMode;name:string;start:number;end:number;duration:number;speed:number;videoMirror:boolean;cameraMirror:boolean;offset:number;repeat:boolean;detections:DetectionFrame[];anchors:Anchor[];selectionFrame:number}
 export type LibraryItem={id:string;name:string;size:number;updated:number;hasMotion:boolean}
 export type SavedLesson={id:string;lesson:Lesson;video:Blob}
 let database:Promise<IDBDatabase>|undefined
